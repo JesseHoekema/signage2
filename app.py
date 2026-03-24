@@ -14,13 +14,19 @@ import urllib.request
 import urllib.parse
 from datetime import datetime
 from functools import wraps
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory
+import queue
+import threading
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, Response
 from werkzeug.utils import secure_filename
 import feedparser
 
 # In-memory cache for weather data
 _weather_cache = {}
 WEATHER_CACHE_TTL = 600  # 10 minutes
+
+# SSE: per-display list of subscriber queues
+_sse_subscribers = {}  # {display_id: [queue.Queue, ...]}
+_sse_lock = threading.Lock()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(16))
@@ -134,6 +140,7 @@ def init_database():
                     'background': {'type': 'glassmorphism', 'blur': 16, 'opacity': 0.12},
                     'rss_mode': 'rotate',
                     'rss_interval': 6,
+                    'rss_refresh': 5,
                     'col_span': 2
                 },
                 {
@@ -324,6 +331,9 @@ def api_display(display_id):
         conn.commit()
         conn.close()
 
+        # Push update to connected players via SSE
+        notify_display_subscribers(display_id, layout_config, background_config)
+
         return jsonify({'success': True})
     
     elif request.method == 'DELETE':
@@ -473,6 +483,24 @@ def api_time():
         'timestamp': now.timestamp()
     })
 
+@app.route('/api/display/<int:display_id>/config')
+def api_display_config_public(display_id):
+    """Public config endpoint for players (no auth required)."""
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT layout_config, background_config FROM displays WHERE id = ?', (display_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        return jsonify({'error': 'Display not found'}), 404
+
+    return jsonify({
+        'layout_config': json.loads(row[0]),
+        'background_config': json.loads(row[1])
+    })
+
+
 @app.route('/api/display/<int:display_id>/heartbeat', methods=['POST'])
 def api_heartbeat(display_id):
     """Player heartbeat - updates last_seen, returns config_version."""
@@ -488,6 +516,49 @@ def api_heartbeat(display_id):
         return jsonify({'error': 'Display not found'}), 404
 
     return jsonify({'config_version': row[0] or 1})
+
+
+def notify_display_subscribers(display_id, layout_config, background_config):
+    """Push a config update to all SSE subscribers for a display."""
+    payload = json.dumps({
+        'type': 'configUpdate',
+        'layout': json.loads(layout_config) if isinstance(layout_config, str) else layout_config,
+        'background': json.loads(background_config) if isinstance(background_config, str) else background_config
+    })
+    with _sse_lock:
+        subscribers = _sse_subscribers.get(display_id, [])
+        for q in subscribers:
+            try:
+                q.put_nowait(payload)
+            except queue.Full:
+                pass  # Drop if client is too slow
+
+
+@app.route('/api/display/<int:display_id>/stream')
+def api_display_stream(display_id):
+    """SSE endpoint — players subscribe here for real-time config pushes."""
+    def event_stream():
+        q = queue.Queue(maxsize=20)
+        with _sse_lock:
+            _sse_subscribers.setdefault(display_id, []).append(q)
+        try:
+            # Send initial keepalive
+            yield 'event: connected\ndata: ok\n\n'
+            while True:
+                try:
+                    payload = q.get(timeout=30)
+                    yield f'data: {payload}\n\n'
+                except queue.Empty:
+                    # Send keepalive comment to prevent timeout
+                    yield ': keepalive\n\n'
+        finally:
+            with _sse_lock:
+                subs = _sse_subscribers.get(display_id, [])
+                if q in subs:
+                    subs.remove(q)
+
+    return Response(event_stream(), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
 @app.route('/api/displays/status')

@@ -13,6 +13,8 @@ let heartbeatInterval = null;
 let currentConfigVersion = null;
 let activeSchedules = {};
 let autoHideTimeout = null;
+let sseSource = null;
+let rssRefreshIntervals = {};
 
 function initializePlayer(config) {
     displayConfig = config;
@@ -47,8 +49,11 @@ function initializePlayer(config) {
     // Start content scheduler
     startScheduler();
 
-    // Start heartbeat for remote management
+    // Start heartbeat for remote management (fallback)
     startHeartbeat();
+
+    // Connect to SSE for real-time config updates
+    startSSE();
 
     // Handle fullscreen
     document.addEventListener('keydown', function(e) {
@@ -68,29 +73,7 @@ function initializePlayer(config) {
     window.addEventListener('message', function(e) {
         if (e.data && e.data.type === 'configUpdate') {
             console.log('Received config update from parent');
-            // Clear all intervals
-            if (clockInterval) clearInterval(clockInterval);
-            Object.values(timerIntervals).forEach(i => clearInterval(i));
-            Object.values(slideshowIntervals).forEach(i => clearInterval(i));
-            Object.values(announcementIntervals).forEach(i => clearInterval(i));
-            Object.values(rssRotationIntervals).forEach(i => clearInterval(i));
-            Object.values(weatherIntervals).forEach(i => clearInterval(i));
-            if (autoHideTimeout) clearTimeout(autoHideTimeout);
-
-            timerIntervals = {};
-            slideshowIntervals = {};
-            announcementIntervals = {};
-            rssRotationIntervals = {};
-            weatherIntervals = {};
-
-            // Update config and re-initialize
-            displayConfig.layout = e.data.layout;
-            displayConfig.background = e.data.background;
-            setupOrientation();
-            setupBackground();
-            setupTopBar();
-            setupGrid();
-            startClock();
+            applyConfigUpdate(e.data.layout, e.data.background);
         }
     });
 }
@@ -1077,14 +1060,84 @@ function renderRSSTicker(container, items, index) {
 }
 
 function startRSSRefresh() {
-    // Refresh RSS feeds every 10 minutes
-    setInterval(() => {
-        displayConfig.layout.zones.forEach((zone, index) => {
-            if (zone.type === 'rss' && zone.content) {
+    // Set up per-zone RSS refresh with configurable interval
+    displayConfig.layout.zones.forEach((zone, index) => {
+        if (zone.type === 'rss' && zone.content) {
+            // rss_refresh is in minutes, default 5, minimum 1
+            const refreshMinutes = Math.max(1, zone.rss_refresh || 5);
+            rssRefreshIntervals[index] = setInterval(() => {
                 loadRSSFeed(zone.content, index);
+            }, refreshMinutes * 60 * 1000);
+        }
+    });
+}
+
+// ─── SSE Real-Time Updates ─────────────────────────────────────
+
+function startSSE() {
+    if (!displayConfig || !displayConfig.id) return;
+    // Don't use SSE in preview mode (iframe)
+    if (new URLSearchParams(window.location.search).get('preview') === '1') return;
+
+    connectSSE();
+}
+
+function connectSSE() {
+    if (sseSource) {
+        sseSource.close();
+    }
+
+    sseSource = new EventSource(`/api/display/${displayConfig.id}/stream`);
+
+    sseSource.addEventListener('connected', () => {
+        console.log('SSE connected for display', displayConfig.id);
+    });
+
+    sseSource.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'configUpdate') {
+                console.log('SSE: received real-time config update');
+                applyConfigUpdate(data.layout, data.background);
             }
-        });
-    }, 10 * 60 * 1000);
+        } catch (e) {
+            console.warn('SSE: failed to parse message', e);
+        }
+    };
+
+    sseSource.onerror = () => {
+        console.warn('SSE connection lost, will auto-reconnect...');
+        // EventSource auto-reconnects; no manual action needed
+    };
+}
+
+function applyConfigUpdate(layout, background) {
+    // Clear all widget intervals
+    if (clockInterval) clearInterval(clockInterval);
+    Object.values(timerIntervals).forEach(i => clearInterval(i));
+    Object.values(slideshowIntervals).forEach(i => clearInterval(i));
+    Object.values(announcementIntervals).forEach(i => clearInterval(i));
+    Object.values(rssRotationIntervals).forEach(i => clearInterval(i));
+    Object.values(weatherIntervals).forEach(i => clearInterval(i));
+    Object.values(rssRefreshIntervals).forEach(i => clearInterval(i));
+    if (autoHideTimeout) clearTimeout(autoHideTimeout);
+
+    timerIntervals = {};
+    slideshowIntervals = {};
+    announcementIntervals = {};
+    rssRotationIntervals = {};
+    weatherIntervals = {};
+    rssRefreshIntervals = {};
+
+    // Update config and re-render in place
+    displayConfig.layout = layout;
+    displayConfig.background = background;
+    setupOrientation();
+    setupBackground();
+    setupTopBar();
+    setupGrid();
+    startClock();
+    startRSSRefresh();
 }
 
 // ─── Heartbeat & Remote Management ────────────────────────────
@@ -1108,9 +1161,19 @@ async function sendHeartbeat() {
             if (currentConfigVersion === null) {
                 currentConfigVersion = data.config_version;
             } else if (data.config_version !== currentConfigVersion) {
-                console.log('Config version changed, refreshing display...');
+                console.log('Config version changed (heartbeat fallback), fetching new config...');
                 currentConfigVersion = data.config_version;
-                refreshDisplay();
+                // Fetch full config and apply in-place instead of reloading
+                try {
+                    const configResp = await fetch(`/api/display/${displayConfig.id}/config`);
+                    const configData = await configResp.json();
+                    if (configData.layout_config && configData.background_config) {
+                        applyConfigUpdate(configData.layout_config, configData.background_config);
+                    }
+                } catch (e) {
+                    console.warn('Failed to fetch config, falling back to reload');
+                    refreshDisplay();
+                }
             }
         }
     } catch (error) {
@@ -1226,8 +1289,10 @@ function refreshDisplay() {
     Object.values(announcementIntervals).forEach(interval => clearInterval(interval));
     Object.values(rssRotationIntervals).forEach(interval => clearInterval(interval));
     Object.values(weatherIntervals).forEach(interval => clearInterval(interval));
+    Object.values(rssRefreshIntervals).forEach(interval => clearInterval(interval));
     if (schedulerInterval) clearInterval(schedulerInterval);
     if (heartbeatInterval) clearInterval(heartbeatInterval);
+    if (sseSource) sseSource.close();
 
     if (autoHideTimeout) clearTimeout(autoHideTimeout);
 
@@ -1334,8 +1399,10 @@ window.addEventListener('beforeunload', function() {
     Object.values(announcementIntervals).forEach(interval => clearInterval(interval));
     Object.values(rssRotationIntervals).forEach(interval => clearInterval(interval));
     Object.values(weatherIntervals).forEach(interval => clearInterval(interval));
+    Object.values(rssRefreshIntervals).forEach(interval => clearInterval(interval));
     if (schedulerInterval) clearInterval(schedulerInterval);
     if (heartbeatInterval) clearInterval(heartbeatInterval);
+    if (sseSource) sseSource.close();
 
     if (autoHideTimeout) clearTimeout(autoHideTimeout);
 });

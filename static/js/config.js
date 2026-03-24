@@ -714,6 +714,11 @@ function renderTypeSettings(zone, i) {
             <label>Rotation Interval (seconds)</label>
             <input type="number" data-field="rss_interval" value="${zone.rss_interval || 5}" min="1" max="60">
             <p class="help-text">Used for rotate mode only</p>
+        </div>
+        <div class="form-field">
+            <label>Feed Refresh Interval (minutes)</label>
+            <input type="number" data-field="rss_refresh" value="${zone.rss_refresh || 5}" min="1" max="60">
+            <p class="help-text">How often to re-fetch the RSS feed for new articles</p>
         </div>`;
     }
 
@@ -1261,7 +1266,7 @@ async function saveConfig() {
 
         S.dirty = false;
         document.getElementById('saveBtn').classList.remove('save-pulse');
-        showToast('Configuration saved! Update will be pushed within 30 seconds.');
+        showToast('Configuration saved! Displays will update in real-time.');
     } catch (error) {
         showToast('Error saving: ' + error.message, 'error');
     }
