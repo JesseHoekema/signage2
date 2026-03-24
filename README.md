@@ -2,7 +2,7 @@
 
 [![Co-authored with Claude Opus 4.6](https://img.shields.io/badge/Co--authored%20with-Claude%20Opus%204.6-cc785c?logo=anthropic&logoColor=white)](https://claude.ai)
 
-A browser-based digital signage application built with Flask and vanilla JavaScript.
+A browser-based digital signage system built with Flask and vanilla JavaScript. Design layouts, configure widgets, and push updates to displays in real time.
 
 ![Player View](screenshots/player-view.png)
 
@@ -11,119 +11,94 @@ A browser-based digital signage application built with Flask and vanilla JavaScr
 ```bash
 git clone https://github.com/AiryAir/signage2
 cd signage2
-
-# Linux/macOS
-./run.sh
-
-# Windows (PowerShell)
-.\run.ps1
+./run.sh        # Linux/macOS
+.\run.ps1       # Windows PowerShell
 ```
 
-Open `http://localhost:5000` in your browser.
+Open `http://localhost:5000`. On first run you'll set an admin password.
 
-On first run, you'll be prompted to set an admin username and password.
+Docker: `docker compose up -d`
 
 ## Features
 
+**Widgets**: Clock, countdown timer, announcements (static/crossfade/marquee), RSS feeds (list/rotate/ticker), weather (Open-Meteo, no API key), images, videos (with mute toggle), slideshows, iframes
+
+**Layout**: 1x1 to 6x6 grid with inline add/remove buttons, zone merging via click handles, horizontal and vertical splitting, configurable screen resolution with portrait support, OLED burn-in protection
+
+**Editor**: Two-panel Figma-style config editor, visual zone type picker, per-zone Content/Style/Schedule tabs, live preview, 30+ Google Fonts, zone backgrounds (transparent/color/glass/image), global backgrounds (color/gradient/image)
+
+**Management**: Multi-display dashboard, real-time config push via SSE, heartbeat polling fallback, per-zone content scheduling by time and day
+
+<details>
+<summary><strong>Full feature list</strong></summary>
+
 ### Widgets
-- **Clock** — configurable 12/24h time format, multiple date formats
-- **Countdown Timer** — with progress bar and color-coded warnings
-- **Announcements** — static, crossfade carousel, or marquee scroll modes
-- **RSS Feeds** — list, rotate, or ticker display modes with configurable refresh interval
-- **iframes** — embed any web content
-- **Images** — single image with cover fit
-- **Videos** — local files or YouTube embeds with autoplay and mute toggle
-- **Slideshows** — multi-image with configurable timer and crossfade
-- **Weather** — current conditions, 3-day forecast via Open-Meteo API (no API key needed), geocoding search
+- Clock with 12/24h format and multiple date formats
+- Countdown timer with progress bar and color-coded warnings
+- Announcements with static, crossfade, and marquee scroll modes
+- RSS feeds with list, rotate, and ticker modes, configurable refresh interval (1-60 min)
+- Weather with current conditions, 3-day forecast, geocoding search (Open-Meteo, no API key)
+- Images with cover fit
+- Videos with local file and YouTube embed support, mute toggle (always muted in preview)
+- Slideshows with configurable timer and crossfade transitions
+- iframes for embedding any web content
 
 ### Layout & Display
-- **Configurable Grid** — 1x1 up to 6x6 layouts with inline add/remove buttons
-- **Zone Merging** — click merge handles between adjacent zones, split horizontally or vertically
-- **Screen Resolution** — configurable resolution with presets, grid preview matches aspect ratio
-- **Portrait Support** — set a portrait resolution (e.g. 1080x1920) for vertically mounted displays
-- **Google Fonts** — 30+ font options for global and per-zone typography
-- **Zone Backgrounds** — transparent, solid color, glassmorphism, or image per zone
-- **Global Backgrounds** — solid color, CSS gradients, or uploaded images
-- **Top Bar Modes** — always visible, overlay, auto-hide, or hidden
-- **OLED Burn-in Protection** — periodic pixel shift to prevent static element burn-in
+- 1x1 to 6x6 grid layouts
+- Inline grid editing: green `+` buttons to add rows/columns, red `x` buttons to remove specific rows/columns
+- Zone merging via blue click handles between adjacent zones
+- Horizontal and vertical zone splitting
+- Screen resolution presets (Full HD, QHD, 4K, ultrawide, square) or custom width x height
+- Portrait display support for vertically mounted screens
+- Per-zone backgrounds: transparent, solid color with opacity, glassmorphism with blur, or image
+- Global backgrounds: solid color, CSS gradients, or uploaded images
+- Top bar modes: always visible, overlay, auto-hide, or hidden with configurable font weight
+- OLED burn-in protection with configurable pixel shift interval
+- Per-zone opacity control
+- Staggered entrance animations
 
-### Configuration
-- **Two-Panel Editor** — Figma-style layout with grid preview on the left and context panel on the right
-- **Inline Grid Editing** — add rows/columns with `+` buttons on grid edges, remove specific rows/columns with `x` buttons
-- **Inline Editing** — click a zone to edit; no modals, changes save to state instantly
-- **Display Settings Access** — `← Display Settings` button in zone editor for quick navigation
-- **Zone Type Picker** — visual card grid with icons instead of dropdowns
-- **Tabbed Zone Editor** — Content, Style, and Schedule tabs per zone
-- **Accordion Settings** — collapsible global settings sections (background, typography, top bar, screen, burn-in)
-- **Live Preview** — toggle a slide-out panel with real-time iframe preview
-- **Toast Notifications** — non-blocking feedback replaces alert dialogs
-- **Unsaved Changes Warning** — pulsing save button and beforeunload prompt
+### Editor
+- Two-panel layout: grid preview on the left, context panel on the right
+- Click a zone to edit, `← Display Settings` button to go back to global settings
+- Visual zone type picker with icon cards
+- Per-zone tabs: Content, Style, and Schedule
+- Collapsible accordion sections for all settings
+- Live preview in a slide-out iframe panel
+- Unsaved changes warning with pulsing save button
+- Toast notifications for save/error feedback
+- 30+ Google Fonts with per-zone or global selection
 
-### Management
-- **Multi-Display** — manage unlimited displays from one dashboard
-- **Real-Time Updates** — config changes push instantly to displays via Server-Sent Events (SSE)
-- **Remote Management** — heartbeat polling with online/offline status indicators as fallback
-- **Content Scheduling** — time-based and day-of-week content overrides per zone
+### Real-Time & Management
+- Multi-display dashboard with create/delete
+- Real-time config push via Server-Sent Events (SSE), no page reload needed
+- Heartbeat polling (every 30s) as fallback with online/offline status badges
+- Per-zone content scheduling by time range and day of week
+- Auto-refresh every 5 minutes as final fallback
+- Public player URLs (no auth required for display screens)
+- File uploads for images and backgrounds (16MB limit)
 
-## Installation
+### Deployment
+- Single Flask app, no build step, no frontend framework
+- SQLite database, zero external services (except Open-Meteo for weather)
+- Docker Compose with optional nginx reverse proxy
+- Cross-platform startup scripts (bash + PowerShell) with venv management
+- Admin credential setup on first run
 
-### Linux / macOS
-
-```bash
-./run.sh
-```
-
-### Windows (PowerShell)
-
-```powershell
-.\run.ps1
-```
-
-### Docker
-
-```bash
-docker compose up -d
-```
-
-The run scripts automatically create a virtual environment and install dependencies.
+</details>
 
 ## Usage
 
-1. Login at `http://localhost:5000`
-2. Create a new display from the dashboard
-3. Click **Configure** to open the two-panel editor
-4. Use the `+` / `x` buttons on the grid edges to add or remove rows and columns
-5. Click a zone to select it — the right panel shows Content, Style, and Schedule tabs
-6. Click the merge handles (blue circles) between zones to merge them
-7. Pick a zone type from the card grid, configure its settings
-8. Click `← Display Settings` to access global settings (background, font, top bar, screen, burn-in)
-9. Hit **Save Changes** — connected displays update instantly via SSE
-10. Open the player URL in fullscreen on your display device
-
-### Weather Widget
-1. Click a zone and set type to "Weather"
-2. Enter a city name and click **Search** to geocode
-3. Choose temperature units (C/F) and refresh interval
-
-### Zone Merging
-1. Click the blue merge handle (circle) between two adjacent zones
-2. The zones combine into one
-3. To split, click the horizontal or vertical split icon on a merged zone
-
-### Content Scheduling
-1. Select a zone (announcement, image, video, slideshow, iframe, or RSS)
-2. Switch to the **Schedule** tab
-3. Click **Add Schedule** to create time-based content overrides
-4. Set start/end times, select active days, and enter override content
-
-### Remote Management
-- Display cards show green "Online" / grey "Offline" badges
-- Players connect via SSE for instant config updates on save
-- Heartbeat polling (every 30s) as fallback if SSE disconnects
+1. Login and create a display from the dashboard
+2. Click **Configure** to open the editor
+3. Use `+` / `x` buttons on grid edges to add or remove rows and columns
+4. Click a zone to edit it, or click the blue circles between zones to merge them
+5. Click `← Display Settings` for global options (background, fonts, screen, burn-in)
+6. Hit **Save Changes**. Connected displays update instantly.
+7. Open the player URL fullscreen on your display device
 
 ## Reset Password
 
-Run `./run.sh` (or `.\run.ps1`) and choose option **3** from the menu.
+Run `./run.sh` (or `.\run.ps1`) and choose option **3**.
 
 ## Screenshots
 
