@@ -737,6 +737,11 @@ function renderTypeSettings(zone, i) {
             <label>Video URL</label>
             <input type="text" data-field="content" value="${escHtml(zone.content)}" placeholder="https://example.com/video.mp4">
             <p class="help-text">MP4, WebM, or YouTube URL</p>
+        </div>
+        <div class="form-field">
+            <label><input type="checkbox" data-field="mute" ${zone.mute === false ? '' : 'checked'}> Mute Video</label>
+            <p class="help-text">Uncheck to enable audio playback</p>
+            <p class="help-text"><i class="material-icons" style="font-size:14px;vertical-align:middle;">info</i> Audio is always muted in preview</p>
         </div>`;
     }
 
@@ -968,7 +973,7 @@ function bindZonePanelEvents(i) {
     // All data-field elements: auto-save on change/input
     panel.querySelectorAll('[data-field]').forEach(el => {
         const field = el.dataset.field;
-        const event = (el.tagName === 'SELECT' || el.type === 'range' || el.type === 'number') ? 'change' : 'input';
+        const event = (el.tagName === 'SELECT' || el.type === 'range' || el.type === 'number' || el.type === 'checkbox') ? 'change' : 'input';
 
         // Set current value for selects
         if (el.tagName === 'SELECT' && zone[field] !== undefined) {
@@ -976,7 +981,7 @@ function bindZonePanelEvents(i) {
         }
 
         el.addEventListener(event, () => {
-            let val = el.value;
+            let val = el.type === 'checkbox' ? el.checked : el.value;
             if (el.type === 'range' || el.type === 'number') val = parseFloat(val);
             zone[field] = val;
             markDirty();

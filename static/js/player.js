@@ -362,7 +362,7 @@ function createZone(zone, index) {
             createImageWidget(contentElement, zone.content);
             break;
         case 'video':
-            createVideoWidget(contentElement, zone.content);
+            createVideoWidget(contentElement, zone.content, zone);
             break;
         case 'slideshow':
             createSlideshowWidget(contentElement, zone.content, index);
@@ -559,8 +559,11 @@ function createImageWidget(container, imageUrl) {
     }
 }
 
-function createVideoWidget(container, videoUrl) {
+function createVideoWidget(container, videoUrl, zone) {
     container.className += ' widget-video';
+    // Muted by default; zone.mute === false enables audio (but always mute in preview)
+    const isPreview = new URLSearchParams(window.location.search).get('preview') === '1';
+    const muted = isPreview || zone?.mute !== false;
 
     if (videoUrl) {
         // Check if it's a YouTube URL
@@ -568,15 +571,14 @@ function createVideoWidget(container, videoUrl) {
         const youtubeMatch = videoUrl.match(youtubeRegex);
 
         if (youtubeMatch) {
-            // YouTube video - use embed iframe
+            // YouTube video - use embed iframe (videoId is safe: validated by regex to be exactly 11 alphanumeric chars)
             const videoId = youtubeMatch[1];
-            container.innerHTML = `
-                <iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}&controls=0&showinfo=0&rel=0&modestbranding=1"
-                        style="width: 100%; height: 100%; border: none; border-radius: 8px;"
-                        allow="autoplay; encrypted-media"
-                        allowfullscreen>
-                </iframe>
-            `;
+            const iframe = document.createElement('iframe');
+            iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${muted ? 1 : 0}&loop=1&playlist=${videoId}&controls=0&showinfo=0&rel=0&modestbranding=1`;
+            iframe.style.cssText = 'width: 100%; height: 100%; border: none; border-radius: 8px;';
+            iframe.allow = 'autoplay; encrypted-media';
+            iframe.allowFullscreen = true;
+            container.appendChild(iframe);
             return;
         }
 
@@ -592,7 +594,7 @@ function createVideoWidget(container, videoUrl) {
         const videoElement = document.createElement('video');
         videoElement.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 8px;';
         videoElement.autoplay = true;
-        videoElement.muted = true;
+        videoElement.muted = muted;
         videoElement.loop = true;
         videoElement.controls = false;
 
@@ -1265,7 +1267,7 @@ function updateZoneContent(index, newContent) {
             createImageWidget(contentElement, newContent);
             break;
         case 'video':
-            createVideoWidget(contentElement, newContent);
+            createVideoWidget(contentElement, newContent, zone);
             break;
         case 'slideshow':
             createSlideshowWidget(contentElement, newContent, index);
