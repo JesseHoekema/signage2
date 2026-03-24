@@ -35,41 +35,8 @@
     <div class="config-body">
         <!-- Center: Toolbar + Grid -->
         <div class="config-center">
-            <div class="grid-toolbar">
-                <div class="toolbar-group">
-                    <label class="toolbar-label">Grid</label>
-                    <select id="gridRows" class="toolbar-select">
-                        <option value="1">1 row</option>
-                        <option value="2">2 rows</option>
-                        <option value="3">3 rows</option>
-                        <option value="4">4 rows</option>
-                    </select>
-                    <span class="toolbar-x">&times;</span>
-                    <select id="gridCols" class="toolbar-select">
-                        <option value="1">1 col</option>
-                        <option value="2">2 cols</option>
-                        <option value="3">3 cols</option>
-                        <option value="4">4 cols</option>
-                    </select>
-                </div>
-                <div class="toolbar-group">
-                    <button type="button" id="mergeToggleBtn" class="btn btn-secondary btn-sm" onclick="toggleMergeMode()">
-                        <i class="material-icons">merge_type</i>
-                        Merge
-                    </button>
-                    <button type="button" id="mergeApplyBtn" class="btn btn-primary btn-sm" onclick="applyMerge()" style="display:none;">
-                        <i class="material-icons">check</i>
-                        Apply Merge
-                    </button>
-                    <button type="button" id="mergeCancelBtn" class="btn btn-secondary btn-sm" onclick="toggleMergeMode()" style="display:none;">
-                        Cancel
-                    </button>
-                    <span id="mergeHint" class="toolbar-hint" style="display:none;">Click zones to select, then apply merge</span>
-                </div>
-            </div>
-
             <div class="grid-canvas" id="gridPreview">
-                <!-- Zones rendered by JS -->
+                <!-- Zones + edge buttons rendered by JS -->
             </div>
         </div>
 

@@ -89,15 +89,9 @@ function initConfigPage(id, layout, bg, description) {
     // Ensure defaults
     S.layout.top_bar = S.layout.top_bar || { mode: 'visible', show_seconds: true, font_weight: '700' };
     S.layout.orientation = S.layout.orientation || 'landscape';
+    S.layout.resolution_w = S.layout.resolution_w || 1920;
+    S.layout.resolution_h = S.layout.resolution_h || 1080;
     S.layout.global_font = S.layout.global_font || 'Arial, sans-serif';
-
-    // Set grid toolbar values
-    document.getElementById('gridRows').value = layout.grid.rows;
-    document.getElementById('gridCols').value = layout.grid.cols;
-
-    // Bind toolbar events
-    document.getElementById('gridRows').addEventListener('change', () => { onGridChange(); });
-    document.getElementById('gridCols').addEventListener('change', () => { onGridChange(); });
 
     // Click outside grid to deselect
     document.querySelector('.grid-canvas').addEventListener('click', (e) => {
@@ -136,14 +130,79 @@ function showToast(message, type = 'success') {
 
 /* ── Grid Rendering ─────────────────────────────────────────── */
 function onGridChange() {
-    const rows = parseInt(document.getElementById('gridRows').value);
-    const cols = parseInt(document.getElementById('gridCols').value);
-    S.layout.grid = { rows, cols };
     reconcileZones();
     renderGrid();
     renderPanel();
     markDirty();
     updateLivePreview();
+}
+
+function addRow() {
+    if (S.layout.grid.rows >= 6) return;
+    S.layout.grid.rows++;
+    onGridChange();
+}
+
+function removeRow() {
+    if (S.layout.grid.rows <= 1) return;
+    S.layout.grid.rows--;
+    onGridChange();
+}
+
+function addCol() {
+    if (S.layout.grid.cols >= 6) return;
+    S.layout.grid.cols++;
+    onGridChange();
+}
+
+function removeCol() {
+    if (S.layout.grid.cols <= 1) return;
+    S.layout.grid.cols--;
+    onGridChange();
+}
+
+function removeSpecificRow(rowIndex) {
+    const { rows, cols } = S.layout.grid;
+    if (rows <= 1) return;
+
+    // Remove zones that occupy only this row, shrink zones that span across it
+    for (let i = S.layout.zones.length - 1; i >= 0; i--) {
+        const pos = S.zonePositionMap[i];
+        if (!pos) continue;
+        const zoneEnd = pos.r + pos.rowSpan - 1;
+        if (rowIndex >= pos.r && rowIndex <= zoneEnd) {
+            if (pos.rowSpan > 1) {
+                S.layout.zones[i].row_span = pos.rowSpan - 1;
+            } else {
+                S.layout.zones.splice(i, 1);
+            }
+        }
+    }
+    S.layout.grid.rows--;
+    S.selectedZone = null;
+    onGridChange();
+}
+
+function removeSpecificCol(colIndex) {
+    const { rows, cols } = S.layout.grid;
+    if (cols <= 1) return;
+
+    // Remove zones that occupy only this column, shrink zones that span across it
+    for (let i = S.layout.zones.length - 1; i >= 0; i--) {
+        const pos = S.zonePositionMap[i];
+        if (!pos) continue;
+        const zoneEnd = pos.c + pos.colSpan - 1;
+        if (colIndex >= pos.c && colIndex <= zoneEnd) {
+            if (pos.colSpan > 1) {
+                S.layout.zones[i].col_span = pos.colSpan - 1;
+            } else {
+                S.layout.zones.splice(i, 1);
+            }
+        }
+    }
+    S.layout.grid.cols--;
+    S.selectedZone = null;
+    onGridChange();
 }
 
 function reconcileZones() {
@@ -209,8 +268,66 @@ function renderGrid() {
     const grid = document.getElementById('gridPreview');
     grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
     grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+    // Apply aspect ratio from resolution
+    const resW = S.layout.resolution_w || 1920;
+    const resH = S.layout.resolution_h || 1080;
+    grid.style.aspectRatio = `${resW} / ${resH}`;
+    grid.style.flex = 'none';
+    grid.style.alignSelf = 'center';
+    grid.style.margin = '0 auto';
+    grid.style.maxHeight = 'calc(100vh - 160px)';
+    grid.style.width = resH > resW ? 'auto' : '100%';
+    grid.style.height = resH > resW ? 'calc(100vh - 160px)' : 'auto';
+
     grid.innerHTML = '';
     S.zonePositionMap = [];
+
+    // Add row/col buttons rendered inside the grid (positioned on edges)
+    if (rows < 6) {
+        const addRowBtn = document.createElement('button');
+        addRowBtn.className = 'grid-edge-btn grid-edge-add grid-edge-row';
+        addRowBtn.title = 'Add row';
+        addRowBtn.innerHTML = '<i class="material-icons">add</i>';
+        addRowBtn.addEventListener('click', (e) => { e.stopPropagation(); addRow(); });
+        grid.appendChild(addRowBtn);
+    }
+    if (cols < 6) {
+        const addColBtn = document.createElement('button');
+        addColBtn.className = 'grid-edge-btn grid-edge-add grid-edge-col';
+        addColBtn.title = 'Add column';
+        addColBtn.innerHTML = '<i class="material-icons">add</i>';
+        addColBtn.addEventListener('click', (e) => { e.stopPropagation(); addCol(); });
+        grid.appendChild(addColBtn);
+    }
+
+    // Per-column remove buttons (top edge, absolute)
+    if (cols > 1) {
+        for (let c = 0; c < cols; c++) {
+            const btn = document.createElement('button');
+            btn.className = 'grid-edge-btn grid-edge-remove grid-edge-remove-col';
+            btn.title = `Remove column ${c + 1}`;
+            btn.innerHTML = '<i class="material-icons">close</i>';
+            // Position: centered over each column on top edge
+            btn.style.left = `calc(${(c + 0.5) / cols * 100}%)`;
+            btn.addEventListener('click', (e) => { e.stopPropagation(); removeSpecificCol(c); });
+            grid.appendChild(btn);
+        }
+    }
+
+    // Per-row remove buttons (left edge, absolute)
+    if (rows > 1) {
+        for (let r = 0; r < rows; r++) {
+            const btn = document.createElement('button');
+            btn.className = 'grid-edge-btn grid-edge-remove grid-edge-remove-row';
+            btn.title = `Remove row ${r + 1}`;
+            btn.innerHTML = '<i class="material-icons">close</i>';
+            // Position: centered over each row on left edge
+            btn.style.top = `calc(${(r + 0.5) / rows * 100}%)`;
+            btn.addEventListener('click', (e) => { e.stopPropagation(); removeSpecificRow(r); });
+            grid.appendChild(btn);
+        }
+    }
 
     const occupied = Array.from({ length: rows }, () => Array(cols).fill(false));
 
@@ -237,13 +354,10 @@ function renderGrid() {
                 const el = document.createElement('div');
                 const isMerged = colSpan > 1 || rowSpan > 1;
                 const isSelected = S.selectedZone === i;
-                const isMergeSelected = S.mergeMode && S.mergeSelection.has(i);
 
                 let cls = 'grid-zone';
                 if (zone.type !== 'empty') cls += ' configured';
                 if (isSelected) cls += ' selected';
-                if (S.mergeMode) cls += ' merge-mode';
-                if (isMergeSelected) cls += ' merge-selected';
                 el.className = cls;
 
                 el.style.gridColumn = `${c + 1} / span ${colSpan}`;
@@ -251,35 +365,114 @@ function renderGrid() {
 
                 const spanLabel = isMerged ? ` <span class="zone-span-badge">${colSpan}&times;${rowSpan}</span>` : '';
                 const typeBadge = zone.type !== 'empty' ? `<span class="zone-type-badge">${zone.type}</span>` : '';
-                const splitBtn = isMerged && !S.mergeMode
-                    ? `<button class="zone-action-btn" onclick="event.stopPropagation(); splitZone(${i})" title="Split"><i class="material-icons">grid_view</i></button>`
-                    : '';
+                let splitBtns = '';
+                if (colSpan > 1) {
+                    splitBtns += `<button class="zone-action-btn" onclick="event.stopPropagation(); splitZoneH(${i})" title="Split horizontally"><i class="material-icons">vertical_split</i></button>`;
+                }
+                if (rowSpan > 1) {
+                    splitBtns += `<button class="zone-action-btn" onclick="event.stopPropagation(); splitZoneV(${i})" title="Split vertically"><i class="material-icons">horizontal_split</i></button>`;
+                }
 
                 el.innerHTML = `
                     ${typeBadge}
-                    <div class="zone-actions">${splitBtn}</div>
+                    <div class="zone-actions">${splitBtns}</div>
                     <div class="zone-label">Zone ${i + 1}${spanLabel}</div>
                 `;
 
-                if (S.mergeMode) {
-                    el.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        if (S.mergeSelection.has(i)) S.mergeSelection.delete(i);
-                        else S.mergeSelection.add(i);
-                        renderGrid();
-                    });
-                } else {
-                    el.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        selectZone(i);
-                    });
-                }
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectZone(i);
+                });
 
                 grid.appendChild(el);
                 return; // placed, next zone
             }
         }
     });
+
+    // Add merge handles between adjacent zones
+    renderMergeHandles(grid, occupied, rows, cols);
+}
+
+function renderMergeHandles(grid, occupied, rows, cols) {
+    // Build a map from (r,c) -> zone index
+    const cellToZone = Array.from({ length: rows }, () => Array(cols).fill(-1));
+    S.layout.zones.forEach((zone, i) => {
+        const pos = S.zonePositionMap[i];
+        if (!pos) return;
+        for (let dr = 0; dr < pos.rowSpan; dr++)
+            for (let dc = 0; dc < pos.colSpan; dc++)
+                cellToZone[pos.r + dr][pos.c + dc] = i;
+    });
+
+    const addedPairs = new Set();
+
+    // Horizontal merges (between columns)
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols - 1; c++) {
+            const zoneA = cellToZone[r][c];
+            const zoneB = cellToZone[r][c + 1];
+            if (zoneA === -1 || zoneB === -1 || zoneA === zoneB) continue;
+            const pairKey = `h-${Math.min(zoneA, zoneB)}-${Math.max(zoneA, zoneB)}`;
+            if (addedPairs.has(pairKey)) continue;
+            addedPairs.add(pairKey);
+
+            const posA = S.zonePositionMap[zoneA];
+            const posB = S.zonePositionMap[zoneB];
+            // Place handle at the border between them
+            const handleR = Math.max(posA.r, posB.r);
+            const handleRowSpan = Math.min(posA.r + posA.rowSpan, posB.r + posB.rowSpan) - handleR;
+
+            const btn = document.createElement('button');
+            btn.className = 'merge-handle merge-handle-h';
+            btn.title = `Merge Zone ${zoneA + 1} and Zone ${zoneB + 1}`;
+            btn.style.gridRow = `${handleR + 1} / span ${handleRowSpan}`;
+            btn.style.gridColumn = `${c + 1} / span 2`;
+            btn.innerHTML = '<i class="material-icons">merge_type</i>';
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                mergeZonePair(zoneA, zoneB);
+            });
+            grid.appendChild(btn);
+        }
+    }
+
+    // Vertical merges (between rows)
+    for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows - 1; r++) {
+            const zoneA = cellToZone[r][c];
+            const zoneB = cellToZone[r + 1][c];
+            if (zoneA === -1 || zoneB === -1 || zoneA === zoneB) continue;
+            const pairKey = `v-${Math.min(zoneA, zoneB)}-${Math.max(zoneA, zoneB)}`;
+            if (addedPairs.has(pairKey)) continue;
+            addedPairs.add(pairKey);
+
+            const posA = S.zonePositionMap[zoneA];
+            const posB = S.zonePositionMap[zoneB];
+            const handleC = Math.max(posA.c, posB.c);
+            const handleColSpan = Math.min(posA.c + posA.colSpan, posB.c + posB.colSpan) - handleC;
+
+            const btn = document.createElement('button');
+            btn.className = 'merge-handle merge-handle-v';
+            btn.title = `Merge Zone ${zoneA + 1} and Zone ${zoneB + 1}`;
+            btn.style.gridRow = `${r + 1} / span 2`;
+            btn.style.gridColumn = `${handleC + 1} / span ${handleColSpan}`;
+            btn.innerHTML = '<i class="material-icons">merge_type</i>';
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                mergeZonePair(zoneA, zoneB);
+            });
+            grid.appendChild(btn);
+        }
+    }
+}
+
+function mergeZonePair(a, b) {
+    S.mergeSelection.clear();
+    S.mergeSelection.add(a);
+    S.mergeSelection.add(b);
+    S.mergeMode = true;
+    applyMerge();
 }
 
 /* ── Selection ──────────────────────────────────────────────── */
@@ -301,6 +494,7 @@ function deselectZone() {
 function renderPanel() {
     const panel = document.getElementById('panelContent');
     if (S.selectedZone !== null) {
+        // Note: innerHTML is used here with escaped content (escHtml) for all user-provided values
         panel.innerHTML = renderZonePanel(S.selectedZone);
         bindZonePanelEvents(S.selectedZone);
     } else {
@@ -323,7 +517,7 @@ function renderGlobalPanel() {
     </div>
     <div class="panel-body">
         <!-- Display Info -->
-        <div class="accordion-section open">
+        <div class="accordion-section">
             <button class="accordion-header" onclick="toggleAccordion(this)">
                 <i class="material-icons">info</i>
                 <span>Display Info</span>
@@ -338,7 +532,7 @@ function renderGlobalPanel() {
         </div>
 
         <!-- Appearance / Background -->
-        <div class="accordion-section open">
+        <div class="accordion-section">
             <button class="accordion-header" onclick="toggleAccordion(this)">
                 <i class="material-icons">palette</i>
                 <span>Background</span>
@@ -377,7 +571,7 @@ function renderGlobalPanel() {
         </div>
 
         <!-- Typography -->
-        <div class="accordion-section open">
+        <div class="accordion-section">
             <button class="accordion-header" onclick="toggleAccordion(this)">
                 <i class="material-icons">text_fields</i>
                 <span>Typography</span>
@@ -425,21 +619,60 @@ function renderGlobalPanel() {
             </div>
         </div>
 
-        <!-- Layout / Orientation -->
+        <!-- Screen / Resolution -->
         <div class="accordion-section">
             <button class="accordion-header" onclick="toggleAccordion(this)">
-                <i class="material-icons">screen_rotation</i>
-                <span>Orientation</span>
+                <i class="material-icons">aspect_ratio</i>
+                <span>Screen</span>
                 <i class="material-icons accordion-chevron">expand_more</i>
             </button>
             <div class="accordion-content">
                 <div class="form-field">
-                    <label>Screen Orientation</label>
-                    <select id="orientationMode">
-                        <option value="landscape" ${S.layout.orientation === 'landscape' ? 'selected' : ''}>Landscape</option>
-                        <option value="portrait" ${S.layout.orientation === 'portrait' ? 'selected' : ''}>Portrait</option>
-                        <option value="auto" ${S.layout.orientation === 'auto' ? 'selected' : ''}>Auto (detect)</option>
+                    <label>Resolution Preset</label>
+                    <select id="resolutionPreset">
+                        <option value="">Custom</option>
+                        <optgroup label="Landscape">
+                            <option value="1920x1080">1920 x 1080 (Full HD)</option>
+                            <option value="2560x1440">2560 x 1440 (QHD)</option>
+                            <option value="3840x2160">3840 x 2160 (4K UHD)</option>
+                            <option value="1366x768">1366 x 768</option>
+                            <option value="1280x720">1280 x 720 (HD)</option>
+                            <option value="1280x800">1280 x 800 (WXGA)</option>
+                        </optgroup>
+                        <optgroup label="Square / Ultrawide">
+                            <option value="1080x1080">1080 x 1080 (Square)</option>
+                            <option value="2560x1080">2560 x 1080 (Ultrawide)</option>
+                            <option value="3440x1440">3440 x 1440 (Ultrawide QHD)</option>
+                        </optgroup>
                     </select>
+                </div>
+                <div class="form-field">
+                    <label>Width x Height (px)</label>
+                    <div style="display:flex;gap:0.5rem;align-items:center;">
+                        <input type="number" id="resWidth" value="${S.layout.resolution_w || 1920}" min="1" style="flex:1;">
+                        <span style="color:var(--text-light);">x</span>
+                        <input type="number" id="resHeight" value="${S.layout.resolution_h || 1080}" min="1" style="flex:1;">
+                    </div>
+                </div>
+                <p class="help-text">For portrait displays, use a portrait resolution (e.g. 1080 x 1920)</p>
+            </div>
+        </div>
+
+        <!-- OLED Burn-in Protection -->
+        <div class="accordion-section">
+            <button class="accordion-header" onclick="toggleAccordion(this)">
+                <i class="material-icons">screen_lock_portrait</i>
+                <span>Burn-in Protection</span>
+                <i class="material-icons accordion-chevron">expand_more</i>
+            </button>
+            <div class="accordion-content">
+                <div class="form-field">
+                    <label><input type="checkbox" id="burnInEnabled" ${S.layout.burn_in_protection ? 'checked' : ''}> Enable pixel shift</label>
+                    <p class="help-text">Subtly shifts content every few minutes to prevent OLED burn-in</p>
+                </div>
+                <div class="form-field" id="burnInIntervalField" style="display:${S.layout.burn_in_protection ? 'block' : 'none'}">
+                    <label>Shift Interval (minutes)</label>
+                    <input type="number" id="burnInInterval" value="${S.layout.burn_in_interval || 10}" min="1" max="60">
                 </div>
             </div>
         </div>
@@ -508,10 +741,53 @@ function bindGlobalPanelEvents() {
     if (tbSec) tbSec.addEventListener('change', updateTb);
     if (tbWeight) tbWeight.addEventListener('change', updateTb);
 
-    // Orientation
-    const orient = document.getElementById('orientationMode');
-    if (orient) orient.addEventListener('change', () => {
-        S.layout.orientation = orient.value;
+    // Resolution
+    const resPreset = document.getElementById('resolutionPreset');
+    const resW = document.getElementById('resWidth');
+    const resH = document.getElementById('resHeight');
+    const applyResolution = () => {
+        const w = parseInt(resW.value) || 1920;
+        const h = parseInt(resH.value) || 1080;
+        S.layout.resolution_w = w;
+        S.layout.resolution_h = h;
+        S.layout.orientation = w >= h ? 'landscape' : 'portrait';
+        renderGrid();
+        markDirty();
+        updateLivePreview();
+    };
+    if (resPreset) resPreset.addEventListener('change', () => {
+        if (resPreset.value) {
+            const [w, h] = resPreset.value.split('x').map(Number);
+            resW.value = w;
+            resH.value = h;
+        }
+        applyResolution();
+    });
+    if (resW) resW.addEventListener('change', () => {
+        if (resPreset) resPreset.value = '';
+        applyResolution();
+    });
+    if (resH) resH.addEventListener('change', () => {
+        if (resPreset) resPreset.value = '';
+        applyResolution();
+    });
+    // Select matching preset on load
+    if (resPreset && S.layout.resolution_w && S.layout.resolution_h) {
+        resPreset.value = `${S.layout.resolution_w}x${S.layout.resolution_h}`;
+    }
+
+    // Burn-in protection
+    const burnIn = document.getElementById('burnInEnabled');
+    const burnInInterval = document.getElementById('burnInInterval');
+    const burnInIntervalField = document.getElementById('burnInIntervalField');
+    if (burnIn) burnIn.addEventListener('change', () => {
+        S.layout.burn_in_protection = burnIn.checked;
+        if (burnInIntervalField) burnInIntervalField.style.display = burnIn.checked ? 'block' : 'none';
+        markDirty();
+        updateLivePreview();
+    });
+    if (burnInInterval) burnInInterval.addEventListener('change', () => {
+        S.layout.burn_in_interval = parseInt(burnInInterval.value) || 10;
         markDirty();
         updateLivePreview();
     });
@@ -562,11 +838,11 @@ function renderZonePanel(i) {
 
     return `
     <div class="panel-header">
+        <button class="panel-back-btn" onclick="deselectZone()">
+            <i class="material-icons">arrow_back</i> Display Settings
+        </button>
         <div class="panel-header-row">
             <h3>Zone ${i + 1}</h3>
-            <button class="btn btn-secondary btn-sm" onclick="deselectZone()" title="Close">
-                <i class="material-icons">close</i>
-            </button>
         </div>
         <div class="panel-tabs">
             <button class="panel-tab ${tab === 'content' ? 'active' : ''}" onclick="switchTab('content')">Content</button>
@@ -1134,12 +1410,6 @@ function toggleAccordion(btn) {
 function toggleMergeMode() {
     S.mergeMode = !S.mergeMode;
     S.mergeSelection.clear();
-
-    document.getElementById('mergeToggleBtn').style.display = S.mergeMode ? 'none' : '';
-    document.getElementById('mergeApplyBtn').style.display = S.mergeMode ? '' : 'none';
-    document.getElementById('mergeCancelBtn').style.display = S.mergeMode ? '' : 'none';
-    document.getElementById('mergeHint').style.display = S.mergeMode ? '' : 'none';
-
     renderGrid();
 }
 
@@ -1192,10 +1462,6 @@ function applyMerge() {
     S.mergeMode = false;
     S.mergeSelection.clear();
     S.selectedZone = null;
-    document.getElementById('mergeToggleBtn').style.display = '';
-    document.getElementById('mergeApplyBtn').style.display = 'none';
-    document.getElementById('mergeCancelBtn').style.display = 'none';
-    document.getElementById('mergeHint').style.display = 'none';
 
     renderGrid();
     renderPanel();
@@ -1203,24 +1469,38 @@ function applyMerge() {
     updateLivePreview();
 }
 
-function splitZone(zoneIndex) {
+function splitZoneH(zoneIndex) {
+    // Split horizontally: reduce col_span by 1, add a new zone
     const zone = S.layout.zones[zoneIndex];
     const colSpan = zone.col_span || 1;
+    if (colSpan <= 1) return;
+
+    zone.col_span = colSpan - 1;
+    // Insert a new 1-wide zone (inherits row_span)
+    const newZone = makeEmptyZone(Date.now());
+    newZone.row_span = zone.row_span || 1;
+    S.layout.zones.splice(zoneIndex + 1, 0, newZone);
+
+    if (S.selectedZone === zoneIndex) S.selectedZone = null;
+    renderGrid();
+    renderPanel();
+    markDirty();
+    updateLivePreview();
+}
+
+function splitZoneV(zoneIndex) {
+    // Split vertically: reduce row_span by 1, add a new zone
+    const zone = S.layout.zones[zoneIndex];
     const rowSpan = zone.row_span || 1;
-    if (colSpan <= 1 && rowSpan <= 1) return;
+    if (rowSpan <= 1) return;
 
-    zone.col_span = 1;
-    zone.row_span = 1;
+    zone.row_span = rowSpan - 1;
+    // Insert a new 1-tall zone (inherits col_span)
+    const newZone = makeEmptyZone(Date.now());
+    newZone.col_span = zone.col_span || 1;
+    S.layout.zones.splice(zoneIndex + 1, 0, newZone);
 
-    const extraCells = (colSpan * rowSpan) - 1;
-    for (let j = 0; j < extraCells; j++) {
-        S.layout.zones.splice(zoneIndex + 1, 0, makeEmptyZone(Date.now() + j));
-    }
-
-    if (S.selectedZone === zoneIndex) {
-        S.selectedZone = null;
-    }
-
+    if (S.selectedZone === zoneIndex) S.selectedZone = null;
     renderGrid();
     renderPanel();
     markDirty();

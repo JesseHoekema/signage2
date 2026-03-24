@@ -15,6 +15,7 @@ let activeSchedules = {};
 let autoHideTimeout = null;
 let sseSource = null;
 let rssRefreshIntervals = {};
+let burnInInterval = null;
 
 function initializePlayer(config) {
     displayConfig = config;
@@ -45,6 +46,9 @@ function initializePlayer(config) {
 
     // Start auto-refresh for RSS feeds
     startRSSRefresh();
+
+    // Start OLED burn-in protection
+    startBurnInProtection();
 
     // Start content scheduler
     startScheduler();
@@ -148,7 +152,9 @@ function setupAutoHide(topBar) {
 // ─── Orientation ──────────────────────────────────────────────
 
 function setupOrientation() {
-    const orientation = (displayConfig.layout && displayConfig.layout.orientation) || 'landscape';
+    const layout = displayConfig.layout || {};
+    const orientation = layout.orientation || 'landscape';
+
     document.body.classList.remove('portrait-mode', 'landscape-mode');
 
     if (orientation === 'portrait') {
@@ -156,7 +162,8 @@ function setupOrientation() {
     } else if (orientation === 'landscape') {
         document.body.classList.add('landscape-mode');
     }
-    // 'auto' mode relies on CSS @media (orientation: portrait)
+    // On a physically rotated display, the OS handles rotation.
+    // The browser gets a portrait viewport and the player fills it naturally.
 }
 
 // ─── Font Loading ─────────────────────────────────────────────
@@ -1074,6 +1081,28 @@ function startRSSRefresh() {
     });
 }
 
+// ─── OLED Burn-in Protection ──────────────────────────────────
+
+function startBurnInProtection() {
+    if (!displayConfig || !displayConfig.layout || !displayConfig.layout.burn_in_protection) return;
+
+    const intervalMinutes = Math.max(1, displayConfig.layout.burn_in_interval || 10);
+    const grid = document.getElementById('displayGrid');
+    if (!grid) return;
+
+    const maxShift = 8; // pixels — enough to prevent burn-in, subtle enough to not notice
+
+    burnInInterval = setInterval(() => {
+        const x = Math.round((Math.random() * 2 - 1) * maxShift);
+        const y = Math.round((Math.random() * 2 - 1) * maxShift);
+        // Shift the grid and background together
+        grid.style.transition = 'transform 3s ease-in-out';
+        grid.style.transform = `translate(${x}px, ${y}px)`;
+        document.body.style.transition = 'background-position 3s ease-in-out';
+        document.body.style.backgroundPosition = `${x}px ${y}px`;
+    }, intervalMinutes * 60 * 1000);
+}
+
 // ─── SSE Real-Time Updates ─────────────────────────────────────
 
 function startSSE() {
@@ -1122,6 +1151,7 @@ function applyConfigUpdate(layout, background) {
     Object.values(rssRotationIntervals).forEach(i => clearInterval(i));
     Object.values(weatherIntervals).forEach(i => clearInterval(i));
     Object.values(rssRefreshIntervals).forEach(i => clearInterval(i));
+    if (burnInInterval) clearInterval(burnInInterval);
     if (autoHideTimeout) clearTimeout(autoHideTimeout);
 
     timerIntervals = {};
@@ -1130,6 +1160,11 @@ function applyConfigUpdate(layout, background) {
     rssRotationIntervals = {};
     weatherIntervals = {};
     rssRefreshIntervals = {};
+    burnInInterval = null;
+
+    // Reset any pixel shift
+    const grid = document.getElementById('displayGrid');
+    if (grid) { grid.style.transition = ''; grid.style.transform = ''; }
 
     // Update config and re-render in place
     displayConfig.layout = layout;
@@ -1140,6 +1175,7 @@ function applyConfigUpdate(layout, background) {
     setupGrid();
     startClock();
     startRSSRefresh();
+    startBurnInProtection();
 }
 
 // ─── Heartbeat & Remote Management ────────────────────────────
@@ -1292,6 +1328,7 @@ function refreshDisplay() {
     Object.values(rssRotationIntervals).forEach(interval => clearInterval(interval));
     Object.values(weatherIntervals).forEach(interval => clearInterval(interval));
     Object.values(rssRefreshIntervals).forEach(interval => clearInterval(interval));
+    if (burnInInterval) clearInterval(burnInInterval);
     if (schedulerInterval) clearInterval(schedulerInterval);
     if (heartbeatInterval) clearInterval(heartbeatInterval);
     if (sseSource) sseSource.close();
@@ -1402,6 +1439,7 @@ window.addEventListener('beforeunload', function() {
     Object.values(rssRotationIntervals).forEach(interval => clearInterval(interval));
     Object.values(weatherIntervals).forEach(interval => clearInterval(interval));
     Object.values(rssRefreshIntervals).forEach(interval => clearInterval(interval));
+    if (burnInInterval) clearInterval(burnInInterval);
     if (schedulerInterval) clearInterval(schedulerInterval);
     if (heartbeatInterval) clearInterval(heartbeatInterval);
     if (sseSource) sseSource.close();

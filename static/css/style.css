@@ -522,8 +522,8 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 1rem 1.25rem;
-    overflow: hidden;
+    padding: 1.25rem;
+    overflow: visible;
     min-width: 0;
 }
 
@@ -605,6 +605,96 @@ body {
     color: var(--text-light);
 }
 
+/* Grid Edge Buttons (add/remove row/col) */
+/* Base edge button */
+.grid-edge-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.15s;
+}
+.grid-edge-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+/* Add buttons (green circles) */
+.grid-edge-add {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    position: absolute;
+    z-index: 10;
+    background: var(--success-color);
+    border: 2px solid var(--success-color);
+    color: white;
+}
+.grid-edge-add .material-icons {
+    font-size: 20px;
+}
+.grid-edge-add:hover {
+    background: #059669;
+    border-color: #059669;
+}
+
+/* Remove buttons (red circles) */
+.grid-edge-remove {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    position: absolute;
+    z-index: 10;
+    background: #ef4444;
+    border: 2px solid #ef4444;
+    color: white;
+}
+.grid-edge-remove .material-icons {
+    font-size: 14px;
+}
+.grid-edge-remove:hover {
+    background: #dc2626;
+    border-color: #dc2626;
+}
+
+/* Positions */
+.grid-edge-remove-col {
+    top: 4px;
+    transform: translateX(-50%);
+}
+.grid-edge-remove-col:hover {
+    transform: translateX(-50%);
+}
+.grid-edge-remove-row {
+    left: 4px;
+    transform: translateY(-50%);
+}
+.grid-edge-remove-row:hover {
+    transform: translateY(-50%);
+}
+
+.grid-edge-row,
+.grid-edge-col {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    position: absolute;
+    z-index: 10;
+}
+.grid-edge-row {
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.grid-edge-col {
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
 /* Grid Canvas */
 .grid-canvas {
     flex: 1;
@@ -615,6 +705,41 @@ body {
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
     min-height: 300px;
+    min-width: 0;
+    position: relative;
+    overflow: visible;
+}
+
+/* Merge handles between zones */
+.merge-handle {
+    position: relative;
+    z-index: 5;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--primary-color);
+    background: var(--primary-color);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.15s;
+    place-self: center;
+}
+.merge-handle:hover {
+    transform: scale(1.2);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+}
+.merge-handle .material-icons {
+    font-size: 16px;
+}
+.merge-handle-h {
+    justify-self: center;
+}
+.merge-handle-v {
+    align-self: center;
 }
 
 .grid-zone {
@@ -755,6 +880,30 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.panel-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0.4rem 0.75rem;
+    margin-bottom: 0.5rem;
+    transition: all 0.15s;
+}
+.panel-back-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+.panel-back-btn .material-icons {
+    font-size: 18px;
 }
 
 .panel-subtitle {
